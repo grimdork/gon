@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Urethramancer/gon"
+	"github.com/grimdork/gon"
 )
 
 func TestAlarm(t *testing.T) {
