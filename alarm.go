@@ -37,25 +37,29 @@ func (a *Alarm) Start() {
 		return
 	}
 
+	a.Lock()
+	defer a.Unlock()
 	a.running = true
 	a.timer = time.NewTimer(a.delay)
-	for {
-		select {
-		case <-a.timer.C:
-			a.Add(1)
-			go func(id int64, af EventFunc) {
-				af(id)
+	go func() {
+		for {
+			select {
+			case <-a.timer.C:
+				a.Add(1)
+				go func(id int64, af EventFunc) {
+					af(id)
+					a.Done()
+				}(a.id, a.f)
+				a.scheduler.RemoveAlarm(a.id)
+				return
+			case <-a.quit:
+				a.timer.Stop()
+				a.running = false
 				a.Done()
-			}(a.id, a.f)
-			a.scheduler.RemoveAlarm(a.id)
-			return
-		case <-a.quit:
-			a.timer.Stop()
-			a.running = false
-			a.Done()
-			return
+				return
+			}
 		}
-	}
+	}()
 }
 
 // Stop and remove the alarm.

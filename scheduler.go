@@ -47,7 +47,7 @@ func (sc *Scheduler) addTicker(d time.Duration, f EventFunc) int64 {
 	}
 	sc.id++
 	t.AddFunc(f, sc.id)
-	go t.Start()
+	t.Start()
 	return sc.id
 }
 
@@ -81,7 +81,7 @@ func (sc *Scheduler) addAlarm(d time.Duration, f EventFunc, repeat bool) int64 {
 	alarm.scheduler = sc
 	alarm.repeat = repeat
 	sc.alarms[sc.id] = alarm
-	go alarm.Start()
+	alarm.Start()
 	return sc.id
 }
 

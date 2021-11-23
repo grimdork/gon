@@ -38,27 +38,31 @@ func (t *Ticker) Start() {
 		return
 	}
 
+	t.Lock()
+	defer t.Unlock()
 	t.running = true
 	t.ticker = time.NewTicker(t.duration)
-	for {
-		select {
-		case <-t.ticker.C:
-			for k, f := range t.funcs {
-				t.Add(1)
-				go func(id int64, tf EventFunc) {
-					tf(id)
-					t.Done()
-				}(k, f)
+	go func() {
+		for {
+			select {
+			case <-t.ticker.C:
+				for k, f := range t.funcs {
+					t.Add(1)
+					go func(id int64, tf EventFunc) {
+						tf(id)
+						t.Done()
+					}(k, f)
+				}
+			case <-t.quit:
+				t.ticker.Stop()
+				for k := range t.funcs {
+					delete(t.funcs, k)
+				}
+				t.running = false
+				return
 			}
-		case <-t.quit:
-			t.ticker.Stop()
-			for k := range t.funcs {
-				delete(t.funcs, k)
-			}
-			t.running = false
-			return
 		}
-	}
+	}()
 }
 
 // Stop the ticker.
