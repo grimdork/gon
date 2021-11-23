@@ -73,13 +73,12 @@ func (sc *Scheduler) Repeat(d time.Duration, f EventFunc) int64 {
 // One-time events
 //
 
-func (sc *Scheduler) addAlarm(d time.Duration, f EventFunc, repeat bool) int64 {
+func (sc *Scheduler) addAlarm(d time.Duration, f EventFunc) int64 {
 	sc.Lock()
 	defer sc.Unlock()
 	sc.id++
 	alarm := NewAlarm(d, sc.id, f)
 	alarm.scheduler = sc
-	alarm.repeat = repeat
 	sc.alarms[sc.id] = alarm
 	alarm.Start()
 	return sc.id
@@ -98,13 +97,13 @@ func (sc *Scheduler) RemoveAlarm(id int64) {
 
 // AddAlarmIn triggers functions after a specific duration has passed.
 func (sc *Scheduler) AddAlarmIn(d time.Duration, f EventFunc) int64 {
-	return sc.addAlarm(d, f, false)
+	return sc.addAlarm(d, f)
 }
 
 // AddAlarmAt triggers functions at a specific time of day.
-func (sc *Scheduler) AddAlarmAt(t time.Time, f EventFunc, repeat bool) int64 {
+func (sc *Scheduler) AddAlarmAt(t time.Time, f EventFunc) int64 {
 	when := time.Until(t)
-	return sc.addAlarm(when, f, repeat)
+	return sc.addAlarm(when, f)
 }
 
 // StopAlarms stops all alarms.

@@ -13,7 +13,7 @@ func TestAlarm(t *testing.T) {
 	event := func(id int64) {
 		t.Logf("Alarm with id %d fired\n", id)
 	}
-	id := sc.AddAlarmAt(when, event, false)
+	id := sc.AddAlarmAt(when, event)
 	t.Logf("Main thread: Created alarm with id %d\n", id)
 
 	tick := func(id int64) {

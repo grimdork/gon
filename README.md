@@ -5,12 +5,12 @@ Fire and forget alarm/ticker scheduling.
 This package creates a scheduler which creates one-shot alarms and repeating tickers which call a function.
 
 ## How
-Add a non-repeating alarm:
+Add an alarm:
 ```go
 	sc := gon.NewScheduler()
 	id = sc.AddAlarmAt(time.Now().Add(time.Second*10), func(id int64) {
 		fmt.Printf("Alarm with id %d fired\n", id)
-	}, false)
+	})
 	fmt.Printf("Alarm %d added\n", id)
 ```
 

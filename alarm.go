@@ -15,7 +15,6 @@ type Alarm struct {
 	id        int64
 	f         EventFunc
 	quit      chan bool
-	repeat    bool
 	running   bool
 }
 
