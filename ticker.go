@@ -43,7 +43,6 @@ func (t *Ticker) Start() {
 	for {
 		select {
 		case <-t.ticker.C:
-			t.Lock()
 			for k, f := range t.funcs {
 				t.Add(1)
 				go func(id int64, tf EventFunc) {
@@ -51,7 +50,6 @@ func (t *Ticker) Start() {
 					t.Done()
 				}(k, f)
 			}
-			t.Unlock()
 		case <-t.quit:
 			t.ticker.Stop()
 			for k := range t.funcs {
@@ -65,6 +63,10 @@ func (t *Ticker) Start() {
 
 // Stop the ticker.
 func (t *Ticker) Stop() {
+	if !t.running {
+		return
+	}
+
 	t.quit <- true
 	t.Wait()
 }

@@ -8,15 +8,15 @@ import (
 // Alarm runs a single function once.
 type Alarm struct {
 	sync.RWMutex
-	scheduler *Scheduler
 	sync.WaitGroup
-	delay   time.Duration
-	timer   *time.Timer
-	id      int64
-	f       EventFunc
-	quit    chan bool
-	repeat  bool
-	running bool
+	scheduler *Scheduler
+	delay     time.Duration
+	timer     *time.Timer
+	id        int64
+	f         EventFunc
+	quit      chan bool
+	repeat    bool
+	running   bool
 }
 
 // NewAlarm creates the Alarm structure and quit channel.
@@ -42,23 +42,17 @@ func (a *Alarm) Start() {
 	for {
 		select {
 		case <-a.timer.C:
-			a.Lock()
 			a.Add(1)
 			go func(id int64, af EventFunc) {
 				af(id)
 				a.Done()
 			}(a.id, a.f)
-			a.Unlock()
-			a.Wait()
-			if a.repeat {
-				// The alarm transitions to repeating ticker here
-				a.scheduler.Repeat(24*time.Hour, a.f)
-			}
 			a.scheduler.RemoveAlarm(a.id)
 			return
 		case <-a.quit:
 			a.timer.Stop()
 			a.running = false
+			a.Done()
 			return
 		}
 	}
@@ -66,7 +60,10 @@ func (a *Alarm) Start() {
 
 // Stop and remove the alarm.
 func (a *Alarm) Stop() {
-	a.Wait()
+	if !a.running {
+		return
+	}
+
 	a.quit <- true
 	a.scheduler.RemoveAlarm(a.id)
 }

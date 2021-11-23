@@ -28,9 +28,6 @@ func TestAlarm(t *testing.T) {
 	tick10 := func(id int64) {
 		t.Logf("10-second ticker with id %d fired\n", id)
 	}
-	tick15 := func(id int64) {
-		t.Logf("15-second ticker with id %d fired\n", id)
-	}
 
 	id = sc.Repeat(time.Second, tick)
 	t.Logf("Main thread: added 1-second with id %d\n", id)
@@ -40,9 +37,7 @@ func TestAlarm(t *testing.T) {
 	t.Logf("Main thread: added 5-second ticker with id %d", id)
 	id = sc.Repeat(10*time.Second, tick10)
 	t.Logf("Main thread: added 10-second ticker with id %d", id)
-	id = sc.Repeat(15*time.Second, tick15)
-	t.Logf("Main thread: added 15-second ticker with id %d", id)
 
-	time.Sleep(time.Second * 22)
+	time.Sleep(time.Second * 11)
 	sc.Wait()
 }
