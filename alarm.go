@@ -10,12 +10,13 @@ type Alarm struct {
 	sync.RWMutex
 	scheduler *Scheduler
 	sync.WaitGroup
-	delay  time.Duration
-	timer  *time.Timer
-	id     int64
-	f      EventFunc
-	quit   chan bool
-	repeat bool
+	delay   time.Duration
+	timer   *time.Timer
+	id      int64
+	f       EventFunc
+	quit    chan bool
+	repeat  bool
+	running bool
 }
 
 // NewAlarm creates the Alarm structure and quit channel.
@@ -32,6 +33,11 @@ func NewAlarm(d time.Duration, aid int64, af EventFunc) *Alarm {
 // Start creates a one-shot timer and runs it after its duration has passed.
 // If the alarm is a repeating alarm, a 24-hour Ticker is created.
 func (a *Alarm) Start() {
+	if a.running {
+		return
+	}
+
+	a.running = true
 	a.timer = time.NewTimer(a.delay)
 	for {
 		select {
@@ -52,6 +58,7 @@ func (a *Alarm) Start() {
 			return
 		case <-a.quit:
 			a.timer.Stop()
+			a.running = false
 			return
 		}
 	}

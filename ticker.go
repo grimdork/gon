@@ -13,6 +13,7 @@ type Ticker struct {
 	ticker   *time.Ticker
 	funcs    map[int64]EventFunc
 	quit     chan bool
+	running  bool
 }
 
 // NewTicker creates the Ticker structure and quit channel.
@@ -33,6 +34,11 @@ func (t *Ticker) AddFunc(f EventFunc, id int64) {
 
 // Start creates the time.Ticker and handles the calls at intervals.
 func (t *Ticker) Start() {
+	if t.running {
+		return
+	}
+
+	t.running = true
 	t.ticker = time.NewTicker(t.duration)
 	for {
 		select {
@@ -51,6 +57,7 @@ func (t *Ticker) Start() {
 			for k := range t.funcs {
 				delete(t.funcs, k)
 			}
+			t.running = false
 			return
 		}
 	}
