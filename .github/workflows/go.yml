@@ -9,10 +9,15 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # make common env available to all steps (fixes cache step and enables fast tests)
+    env:
+      GOMODCACHE: ${{ github.workspace }}/.gocache
+      GON_FAST_TEST: 1
 
     strategy:
       matrix:
-        go-version: [1.20]
+        # match the go directive in go.mod to avoid toolchain mismatches
+        go-version: [1.25]
 
     steps:
       - uses: actions/checkout@v4
@@ -29,9 +34,12 @@ jobs:
           key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-${{ matrix.go-version }}-
+      - name: Debug Go environment
+        run: |
+          go version
+          go env GOROOT GOPATH GOMOD GOMODCACHE
+          ls -la ${{ env.GOMODCACHE }} || true
       - name: Run unit tests (race)
-        env:
-          GOMODCACHE: ${{ github.workspace }}/.gocache
         run: |
           go test ./... -v -race
       - name: Run linters
