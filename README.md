@@ -1,4 +1,10 @@
 # gon
+
+[![Go tests](https://github.com/grimdork/gon/actions/workflows/go.yml/badge.svg)](https://github.com/grimdork/gon/actions/workflows/go.yml)
+[![PkgGoDev](https://pkg.go.dev/badge/github.com/grimdork/gon)](https://pkg.go.dev/github.com/grimdork/gon)
+[![Go Report Card](https://goreportcard.com/badge/github.com/grimdork/gon)](https://goreportcard.com/report/github.com/grimdork/gon)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 Fire-and-forget alarm and ticker scheduling — small, concurrency-safe helper for Go.
 
 This README shows the modern ergonomic API first (Handle + context-aware callbacks), then legacy usage, testing tips, and CI notes.
