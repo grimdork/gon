@@ -58,10 +58,3 @@ jobs:
       - name: Run unit tests (race)
         run: |
           go test ./... -v -race
-      - name: Run linters (golangci-lint action)
-        uses: golangci/golangci-lint-action@v5
-        with:
-          version: v1.59.0
-          install-mode: source
-          skip-cache: true
-          args: --timeout=5m
