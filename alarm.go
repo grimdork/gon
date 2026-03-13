@@ -1,6 +1,7 @@
 package gon
 
 import (
+	"context"
 	"sync"
 	"time"
 )
@@ -13,13 +14,25 @@ type Alarm struct {
 	delay     time.Duration
 	timer     *time.Timer
 	id        int64
-	f         EventFunc
-	quit      chan struct{}
-	running   bool
+	// context-aware callback
+	f       EventFuncCtx
+	quit    chan struct{}
+	running bool
+	// cancel func for in-flight handler
+	handlerCancel context.CancelFunc
 }
 
-// NewAlarm creates the Alarm structure and quit channel.
+// NewAlarm creates the Alarm structure and quit channel. Accepts the old
+// EventFunc signature and adapts it to a context-aware callback.
 func NewAlarm(d time.Duration, aid int64, af EventFunc) *Alarm {
+	return NewAlarmCtx(d, aid, func(ctx context.Context, id int64) {
+		// adapter: ignore context
+		af(id)
+	})
+}
+
+// NewAlarmCtx creates an Alarm with a context-aware callback.
+func NewAlarmCtx(d time.Duration, aid int64, af EventFuncCtx) *Alarm {
 	a := &Alarm{
 		delay: d,
 		id:    aid,
@@ -58,9 +71,18 @@ func (a *Alarm) Start() {
 			case <-a.timer.C:
 				// launch the handler
 				a.Add(1)
-				go func(id int64, af EventFunc) {
+				// create cancellable context for handler
+				ctx, cancel := context.WithCancel(context.Background())
+				a.Lock()
+				a.handlerCancel = cancel
+				a.Unlock()
+				go func(id int64, af EventFuncCtx) {
 					defer a.Done()
-					af(id)
+					af(ctx, id)
+					// clear cancel after handler finishes
+					a.Lock()
+					a.handlerCancel = nil
+					a.Unlock()
 				}(a.id, a.f)
 				// remove from scheduler without calling back into Stop
 				if a.scheduler != nil {
@@ -95,6 +117,10 @@ func (a *Alarm) Stop() {
 	select {
 	case a.quit <- struct{}{}:
 	default:
+	}
+	// cancel handler if running
+	if a.handlerCancel != nil {
+		a.handlerCancel()
 	}
 	a.running = false
 	a.Unlock()
