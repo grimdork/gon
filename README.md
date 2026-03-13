@@ -1,11 +1,23 @@
 # gon
 Fire-and-forget alarm and ticker scheduling — small, concurrency-safe helper for Go.
 
-This README prefers the modern, ergonomic API first (Handle + context-aware callbacks), then shows the legacy API and migration notes.
+This README shows the modern ergonomic API first (Handle + context-aware callbacks), then legacy usage, testing tips, and CI notes.
+
+Installation
+
+Get the package:
+
+```sh
+go get github.com/grimdork/gon@latest
+```
+
+Quick overview
+
+- Modern: opaque Handle + context-aware callbacks (preferred).
+- Legacy: numeric IDs + simple callbacks (kept for compatibility).
+- Testing: set GON_FAST_TEST=1 to run timing tests quickly in CI or locally.
 
 Recommended (modern) API
-
-The modern API returns opaque Handles and supports context-aware callbacks. Use these in new code.
 
 Example: repeating task with a Handle and context-aware callback
 
@@ -13,7 +25,6 @@ Example: repeating task with a Handle and context-aware callback
 sc := gon.NewScheduler()
 // Context-aware handler signature: func(ctx context.Context, id int64)
 h := sc.RepeatHandle(3*time.Second, func(ctx context.Context, id int64) {
-    // respect ctx.Done() and clean up promptly when cancelled
     select {
     case <-ctx.Done():
         return
@@ -27,7 +38,7 @@ h.Remove()
 h.RemoveAndWait()
 ```
 
-Example: one-shot alarm (Handle + context-aware)
+One-shot alarm (Handle + context-aware)
 
 ```go
 h := sc.AddAlarmInHandle(10*time.Second, func(ctx context.Context, id int64) {
@@ -37,17 +48,35 @@ h := sc.AddAlarmInHandle(10*time.Second, func(ctx context.Context, id int64) {
 h.RemoveAndWait()
 ```
 
-Batch removal (handles)
+API quick reference (modern)
+
+- type Handle: opaque handle with methods Remove() and RemoveAndWait()
+- RepeatHandle(d time.Duration, f EventFuncCtx) Handle
+- AddAlarmInHandle(d time.Duration, f EventFuncCtx) Handle
+- RepeatWithContext(d time.Duration, f EventFuncCtx) int64
+- AddAlarmInWithContext(d time.Duration, f EventFuncCtx) int64
+- EventFuncCtx signature: func(ctx context.Context, id int64)
+
+Legacy API (backwards-compatible)
+
+The legacy API remains available. Example:
 
 ```go
-// collect handles when creating jobs
+id := sc.Repeat(3*time.Second, func(id int64) {
+    fmt.Printf("legacy tick %d\n", id)
+})
+sc.RemoveTickerByID(id)
+```
+
+Advanced usage
+
+Batch removal (handles):
+
+```go
 handles := make([]gon.Handle, 0, 10)
 for i := 0; i < 10; i++ {
-    handles = append(handles, sc.RepeatHandle(time.Second, func(ctx context.Context, id int64) {
-        // work
-    }))
+    handles = append(handles, sc.RepeatHandle(time.Second, func(ctx context.Context, id int64) {}))
 }
-// remove all and wait for clean shutdown
 for _, h := range handles {
     h.RemoveAndWait()
 }
@@ -56,110 +85,38 @@ for _, h := range handles {
 StopAll (stop everything, wait)
 
 ```go
-// StopAll stops all alarms and tickers and waits for handlers to finish
 sc.StopAll()
-// sc.Wait() is useful if you used non-blocking removals earlier and want
-// to wait for the remaining live jobs to finish.
 sc.Wait()
 ```
 
-Graceful server shutdown example
+Graceful server shutdown pattern
 
 ```go
-// typical pattern for shutting down services that use gon for background tasks
-func runServer() error {
-    sc := gon.NewScheduler()
-    // start server and background jobs...
-
-    // wait for termination signal (context cancellation etc.)
-    <-ctx.Done()
-
-    // cancel and wait for clean shutdown of scheduled work
-    sc.StopAll()
-    // optionally wait for any remaining items in legacy maps
-    sc.Wait()
-    return nil
-}
+// on termination:
+sc.StopAll()
+sc.Wait()
 ```
-
-Context-aware variants that return numeric ids
-
-If you want numeric ids instead of Handles, the WithContext helpers return the id and accept EventFuncCtx:
-
-- RepeatWithContext(d time.Duration, f EventFuncCtx) int64
-- AddAlarmInWithContext(d time.Duration, f EventFuncCtx) int64
-
-Legacy API (backwards-compatible)
-
-The legacy API is preserved and works as before. Use it when migrating incrementally.
-
-Example: legacy repeating task
-
-```go
-id := sc.Repeat(3*time.Second, func(id int64) {
-    fmt.Printf("legacy tick %d\n", id)
-})
-// remove by id - ergonomic RemoveTickerByID exists too
-sc.RemoveTickerByID(id)
-```
-
-Example: legacy alarm
-
-```go
-id := sc.AddAlarmIn(5*time.Second, func(id int64) {
-    fmt.Printf("legacy alarm %d\n", id)
-})
-sc.RemoveAlarm(id)
-```
-
-Advanced: combining legacy and modern handlers
-
-```go
-// create some legacy jobs and some context-aware jobs
-id := sc.Repeat(500*time.Millisecond, func(id int64) { /* legacy */ })
-h := sc.RepeatHandle(500*time.Millisecond, func(ctx context.Context, id int64) { /* ctx-aware */ })
-
-// remove legacy by id and handle by Handle
-sc.RemoveTickerByID(id)
-h.RemoveAndWait()
-```
-
-When to prefer the modern API
-
-- Prefer Handles when you need ergonomic per-job control (Stop/Remove/Wait) or plan to attach behavior to the job handle later.
-- Prefer EventFuncCtx when handlers may block or need cleanup: the scheduler cancels the provided context when the job is removed or the scheduler stops.
-
-Migration notes
-
-- RepeatHandleFunc / AddAlarmInHandleFunc accept legacy EventFunc and return a Handle for ergonomic control while keeping the old callback signature.
-- RemoveTicker(d) and other duration-grouped operations are still available for backwards compatibility, but per-job removal via handles or RemoveTickerByID is recommended.
 
 Testing and CI
 
-- Fast mode for tests: set GON_FAST_TEST=1 to run timing tests in a short window (default fast window is 300ms).
-- Custom test window: set GON_TEST_WINDOW_MS to a number of milliseconds.
-- Recommended CI command: GON_FAST_TEST=1 go test -race ./...
+- Fast mode for tests: set GON_FAST_TEST=1. This shortens the timing windows used in tests (useful for CI).
+- Custom test window: set GON_TEST_WINDOW_MS to control the test timing window (milliseconds).
+- Recommended CI command: `GON_FAST_TEST=1 go test -race ./...`
 
-Concurrency guarantees
+CI notes
 
-- Handlers run with a cancellable context; the scheduler cancels the context on Remove/Stop to allow graceful handler termination.
-- Stop/Remove operations avoid holding the scheduler lock while performing blocking Stop() calls to prevent deadlocks.
-- Stop/Wait and RemoveAndWait semantics ensure WaitGroups are used so callers can deterministically wait for goroutine shutdown.
+- Prefer running tests in the official golang container in CI to avoid host toolchain cache issues. Example workflow uses `container: golang:1.25` to ensure a clean toolchain.
+- Avoid caching compiled build artifacts across different Go versions; cache only module downloads if needed.
 
-Compatibility & stability
+Migration hints
 
-- All legacy APIs remain available and continue to work. The new APIs are additive.
-- The package aims to remain small and non-invasive; default behaviors are unchanged unless you opt into the modern helpers.
-
-Examples and snippets
-
-- See gon_test.go and gon_handle_test.go for more examples and tests demonstrating Handle behavior and the context-aware callbacks.
+- Add Handle-returning variants (RepeatHandle/AddAlarmInHandle) where ergonomic control is helpful.
+- Use EventFuncCtx when handlers may block or need cancellation: the scheduler cancels the provided context when the job is removed or the scheduler stops.
 
 Contributing
 
-- Run `go test -race ./...` locally and in CI.
-- Keep changes small and well-tested; prefer adding tests for any concurrency changes.
+- Run `GON_FAST_TEST=1 go test -race ./...` locally. Keep changes small and include tests for concurrency changes.
 
 License
 
-- MIT (same as the project repository).
+- MIT
