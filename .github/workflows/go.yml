@@ -40,7 +40,8 @@ jobs:
         with:
           path: |
             ${{ env.GOMODCACHE }}
-          key: ${{ runner.os }}-gomodcache-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
+          # don't require go.sum to exist; keep cache keyed by OS and Go version
+          key: ${{ runner.os }}-gomodcache-${{ matrix.go-version }}
           restore-keys: |
             ${{ runner.os }}-gomodcache-${{ matrix.go-version }}-
       - name: Clean local build cache
