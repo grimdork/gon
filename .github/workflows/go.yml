@@ -8,6 +8,9 @@ on:
 
 jobs:
   test:
+    # run inside the official golang container to ensure a clean, matching toolchain
+    container:
+      image: golang:1.25
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # make common env available to all steps (fixes cache step and enables fast tests)
@@ -25,10 +28,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: ${{ matrix.go-version }}
       - name: Prepare module files
         run: |
           # ensure module files are present; repo has no external deps but this normalises state
