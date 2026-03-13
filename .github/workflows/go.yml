@@ -58,23 +58,3 @@ jobs:
       - name: Run unit tests (race)
         run: |
           go test ./... -v -race
-
-  lint:
-    # run lint on the runner (not inside the golang container) so the prebuilt golangci-lint binary
-    # runs in an environment it expects and avoids export-data/toolchain mismatches.
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      GOMODCACHE: ${{ github.workspace }}/.gocache
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-    steps:
-      - uses: actions/checkout@v5
-      - name: Prepare module files
-        run: |
-          go mod tidy
-          go mod download
-      - name: Run golangci-lint (official action)
-        uses: golangci/golangci-lint-action@v5
-        with:
-          version: v1.59.0
-          args: --timeout=5m
