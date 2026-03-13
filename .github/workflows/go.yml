@@ -25,20 +25,28 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: ${{ matrix.go-version }}
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ${{ env.GOMODCACHE }}
-          key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-${{ matrix.go-version }}-
+      - name: Prepare module files
+        run: |
+          # ensure go.sum exists so cache key hashing works and modules can be downloaded
+          go mod tidy
+          go mod download
       - name: Debug Go environment
         run: |
           go version
-          go env GOROOT GOPATH GOMOD GOMODCACHE
+          go env GOROOT GOPATH GOMOD GOMODCACHE GOCACHE
           ls -la ${{ env.GOMODCACHE }} || true
+      - name: Cache Go modules (only module download cache)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.GOMODCACHE }}
+          key: ${{ runner.os }}-gomodcache-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-gomodcache-${{ matrix.go-version }}-
+      - name: Clean local build cache
+        run: |
+          # clear build cache to avoid importing objects built with different Go versions
+          go clean -cache -modcache -testcache || true
       - name: Run unit tests (race)
         run: |
           go test ./... -v -race
