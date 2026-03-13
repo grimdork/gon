@@ -58,12 +58,8 @@ jobs:
       - name: Run unit tests (race)
         run: |
           go test ./... -v -race
-      - name: Install and run golangci-lint (installed with go install)
-        run: |
-          set -e
-          echo "Installing golangci-lint..."
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.59.0
-          echo "Adding GOPATH/bin to PATH"
-          export PATH="$(go env GOPATH)/bin:$PATH"
-          golangci-lint --version
-          golangci-lint run --timeout=5m
+      - name: Run golangci-lint (official action)
+        uses: golangci/golangci-lint-action@v5
+        with:
+          version: v1.59.0
+          args: --timeout=5m
