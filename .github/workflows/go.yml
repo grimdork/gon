@@ -9,6 +9,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # make common env available to all steps (fixes cache step and enables fast tests)
     env:
       GOMODCACHE: ${{ github.workspace }}/.gocache
@@ -30,27 +31,31 @@ jobs:
           go-version: ${{ matrix.go-version }}
       - name: Prepare module files
         run: |
-          # ensure go.sum exists so cache key hashing works and modules can be downloaded
+          # ensure module files are present; repo has no external deps but this normalises state
           go mod tidy
           go mod download
-      - name: Debug Go environment
+      - name: Debug Go environment (detailed)
         run: |
+          echo "--- go version & env ---"
           go version
           go env GOROOT GOPATH GOMOD GOMODCACHE GOCACHE
-          ls -la ${{ env.GOMODCACHE }} || true
-      - name: Cache Go modules (only module download cache)
-        uses: actions/cache@v4
-        with:
-          path: |
-            ${{ env.GOMODCACHE }}
-          # don't require go.sum to exist; keep cache keyed by OS and Go version
-          key: ${{ runner.os }}-gomodcache-${{ matrix.go-version }}
-          restore-keys: |
-            ${{ runner.os }}-gomodcache-${{ matrix.go-version }}-
-      - name: Clean local build cache
+          echo "--- GOROOT/pkg ---"
+          ls -la "$(go env GOROOT)/pkg" || true
+          echo "--- GOCACHE ---"
+          ls -la "$(go env GOCACHE)" || true
+          echo "--- GOMODCACHE ---"
+          ls -la "${{ env.GOMODCACHE }}" || true
+      - name: Aggressive clean of caches
         run: |
-          # clear build cache to avoid importing objects built with different Go versions
+          # remove any stale compiled objects that might be incompatible with the runner toolchain
+          set -e
+          echo "Cleaning go caches and pkg directories..."
           go clean -cache -modcache -testcache || true
+          rm -rf "$(go env GOCACHE)" || true
+          # clear module download cache folder we create for CI
+          rm -rf "${{ env.GOMODCACHE }}" || true
+          # show remaining cache state
+          echo "After cleanup:"; go env GOCACHE GOMODCACHE; ls -la "$(go env GOROOT)/pkg" || true
       - name: Run unit tests (race)
         run: |
           go test ./... -v -race
