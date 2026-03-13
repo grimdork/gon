@@ -13,6 +13,9 @@ jobs:
     env:
       GOMODCACHE: ${{ github.workspace }}/.gocache
       GON_FAST_TEST: 1
+      # Opt into running GitHub Actions on Node.js 24 now (prevents deprecation warnings
+      # and avoids surprises when GitHub changes the default runtime).
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     strategy:
       matrix:
