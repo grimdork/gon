@@ -12,7 +12,7 @@ type Ticker struct {
 	duration time.Duration
 	ticker   *time.Ticker
 	funcs    map[int64]EventFunc
-	quit     chan bool
+	quit     chan struct{}
 	running  bool
 }
 
@@ -20,8 +20,9 @@ type Ticker struct {
 func NewTicker(d time.Duration) *Ticker {
 	t := &Ticker{
 		duration: d,
-		funcs:    make(map[int64]EventFunc)}
-	t.quit = make(chan bool)
+		funcs:    make(map[int64]EventFunc),
+		quit:     make(chan struct{}, 1),
+	}
 	return t
 }
 
@@ -39,38 +40,56 @@ func (t *Ticker) Start() {
 	}
 
 	t.Lock()
-	defer t.Unlock()
+	if t.running {
+		t.Unlock()
+		return
+	}
 	t.running = true
 	t.ticker = time.NewTicker(t.duration)
+	// mark supervisor goroutine
+	t.Add(1)
 	go func() {
+		defer t.Add(-1)
 		for {
 			select {
 			case <-t.ticker.C:
-				for k, f := range t.funcs {
+				// snapshot funcs under read lock to avoid holding lock while calling
+				t.RLock()
+				funcs := make([]EventFunc, 0, len(t.funcs))
+				for _, f := range t.funcs {
+					funcs = append(funcs, f)
+				}
+				t.RUnlock()
+				for _, f := range funcs {
 					t.Add(1)
-					go func(id int64, tf EventFunc) {
-						tf(id)
-						t.Done()
-					}(k, f)
+					go func(tf EventFunc) {
+						defer t.Done()
+						tf(0)
+					}(f)
 				}
 			case <-t.quit:
 				t.ticker.Stop()
+				// clear funcs map
+				t.Lock()
 				for k := range t.funcs {
 					delete(t.funcs, k)
 				}
 				t.running = false
+				t.Unlock()
 				return
 			}
 		}
 	}()
+	t.Unlock()
 }
 
 // Stop the ticker.
 func (t *Ticker) Stop() {
-	if !t.running {
-		return
+	// signal quit non-blocking
+	select {
+	case t.quit <- struct{}{}:
+	default:
 	}
-
-	t.quit <- true
+	// wait for supervisor and handlers
 	t.Wait()
 }

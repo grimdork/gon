@@ -86,12 +86,16 @@ func (sc *Scheduler) addAlarm(d time.Duration, f EventFunc) int64 {
 
 // RemoveAlarm removes an alarm by id, stopping it if necessary.
 func (sc *Scheduler) RemoveAlarm(id int64) {
+	// remove from map under lock first to avoid reentrant calls
 	sc.Lock()
-	defer sc.Unlock()
 	alarm, ok := sc.alarms[id]
 	if ok {
-		alarm.Stop()
 		delete(sc.alarms, id)
+	}
+	sc.Unlock()
+	if ok {
+		// stop the alarm outside the scheduler lock
+		alarm.Stop()
 	}
 }
 
@@ -108,9 +112,16 @@ func (sc *Scheduler) AddAlarmAt(t time.Time, f EventFunc) int64 {
 
 // StopAlarms stops all alarms.
 func (sc *Scheduler) StopAlarms() {
+	// copy alarms under lock to avoid mutation during iteration
 	sc.Lock()
-	defer sc.Unlock()
+	alarms := make([]*Alarm, 0, len(sc.alarms))
 	for _, a := range sc.alarms {
+		alarms = append(alarms, a)
+	}
+	// clear map
+	sc.alarms = make(map[int64]*Alarm)
+	sc.Unlock()
+	for _, a := range alarms {
 		a.Stop()
 	}
 }
@@ -118,8 +129,14 @@ func (sc *Scheduler) StopAlarms() {
 // StopTickers stops all tickers.
 func (sc *Scheduler) StopTickers() {
 	sc.Lock()
-	defer sc.Unlock()
+	tickers := make([]*Ticker, 0, len(sc.tickers))
 	for _, t := range sc.tickers {
+		tickers = append(tickers, t)
+	}
+	// clear map while holding lock
+	sc.tickers = make(map[time.Duration]*Ticker)
+	sc.Unlock()
+	for _, t := range tickers {
 		t.Stop()
 	}
 }
@@ -132,10 +149,21 @@ func (sc *Scheduler) StopAll() {
 
 // Wait for all waitgroups in tickers and alarms.
 func (sc *Scheduler) Wait() {
+	// snapshot tickers and alarms under read lock
+	sc.RLock()
+	tickers := make([]*Ticker, 0, len(sc.tickers))
 	for _, t := range sc.tickers {
+		tickers = append(tickers, t)
+	}
+	alarms := make([]*Alarm, 0, len(sc.alarms))
+	for _, a := range sc.alarms {
+		alarms = append(alarms, a)
+	}
+	sc.RUnlock()
+	for _, t := range tickers {
 		t.Wait()
 	}
-	for _, a := range sc.alarms {
+	for _, a := range alarms {
 		a.Wait()
 	}
 }

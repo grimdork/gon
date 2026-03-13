@@ -14,7 +14,7 @@ type Alarm struct {
 	timer     *time.Timer
 	id        int64
 	f         EventFunc
-	quit      chan bool
+	quit      chan struct{}
 	running   bool
 }
 
@@ -24,8 +24,8 @@ func NewAlarm(d time.Duration, aid int64, af EventFunc) *Alarm {
 		delay: d,
 		id:    aid,
 		f:     af,
+		quit:  make(chan struct{}, 1),
 	}
-	a.quit = make(chan bool)
 	return a
 }
 
@@ -37,36 +37,67 @@ func (a *Alarm) Start() {
 	}
 
 	a.Lock()
-	defer a.Unlock()
+	if a.running {
+		a.Unlock()
+		return
+	}
 	a.running = true
-	a.timer = time.NewTimer(a.delay)
+	if a.timer == nil {
+		a.timer = time.NewTimer(a.delay)
+	} else {
+		a.timer.Reset(a.delay)
+	}
+	// mark the supervisor goroutine in the WaitGroup
+	a.Add(1)
+	a.Unlock()
+
 	go func() {
+		defer a.Add(-1)
 		for {
 			select {
 			case <-a.timer.C:
+				// launch the handler
 				a.Add(1)
 				go func(id int64, af EventFunc) {
+					defer a.Done()
 					af(id)
-					a.Done()
 				}(a.id, a.f)
-				a.scheduler.RemoveAlarm(a.id)
+				// remove from scheduler without calling back into Stop
+				if a.scheduler != nil {
+					a.scheduler.RemoveAlarm(a.id)
+				}
 				return
 			case <-a.quit:
-				a.timer.Stop()
-				a.running = false
-				a.Done()
+				// stop timer and exit; do not call Done here for handler WaitGroup
+				if !a.timer.Stop() {
+					// drain timer channel if needed
+					select {
+					case <-a.timer.C:
+					default:
+					}
+				}
 				return
 			}
 		}
 	}()
 }
 
-// Stop and remove the alarm.
+// Stop stops the alarm and waits for any in-flight handlers to complete.
+// It does NOT call back into the scheduler to remove the alarm; callers
+// (typically Scheduler.RemoveAlarm) should coordinate removal from the map.
 func (a *Alarm) Stop() {
+	a.Lock()
 	if !a.running {
+		a.Unlock()
 		return
 	}
-
-	a.quit <- true
-	a.scheduler.RemoveAlarm(a.id)
+	// signal quit without blocking
+	select {
+	case a.quit <- struct{}{}:
+	default:
+	}
+	a.running = false
+	a.Unlock()
+	// wait for supervisor goroutine and any handler goroutines to finish
+	a.Wait()
 }
