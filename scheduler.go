@@ -124,21 +124,25 @@ func (sc *Scheduler) Repeat(d time.Duration, f EventFunc) int64 {
 
 // RemoveTicker removes a ticker by duration, stopping it if necessary and
 // removing any job entries that belonged to that duration.
+// Stop is invoked outside the scheduler lock to avoid lock-order deadlocks.
 func (sc *Scheduler) RemoveTicker(d time.Duration) {
 	sc.Lock()
-	defer sc.Unlock()
 	t, ok := sc.tickers[d]
 	if ok {
-		// stop the ticker and move to dormant
-		t.Stop()
+		// move to dormant and clear from active tickers while holding lock
 		delete(sc.tickers, d)
 		sc.dormantTickers[d] = t
-	}
-	// remove job entries for this duration
-	for id, je := range sc.jobs {
-		if je.duration == d {
-			delete(sc.jobs, id)
+		// remove job entries for this duration
+		for id, je := range sc.jobs {
+			if je.duration == d {
+				delete(sc.jobs, id)
+			}
 		}
+	}
+	sc.Unlock()
+	if ok {
+		// stop the ticker outside the scheduler lock to avoid deadlocks
+		t.Stop()
 	}
 }
 
